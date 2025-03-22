@@ -40,7 +40,7 @@ func TestValidSingleHeaderWithExtraWhiteSpace(t *testing.T) {
 
 func TestValidTwoSameHeadersSpace(t *testing.T) {
 	headers := NewHeaders()
-  data := []byte("Host: localhost:42069\r\nHost: localHoest:69\r\n\r\n")
+	data := []byte("Host: localhost:42069\r\nHost: localHoest:69\r\n\r\n")
 	n, done, err := headers.Parse(data)
 	require.NoError(t, err)
 	require.NotNil(t, headers)
@@ -48,7 +48,7 @@ func TestValidTwoSameHeadersSpace(t *testing.T) {
 	assert.Equal(t, 23, n)
 	assert.False(t, done)
 
-  data = data[n:]
+	data = data[n:]
 	n, done, err = headers.Parse(data)
 	require.NoError(t, err)
 	require.NotNil(t, headers)
@@ -67,15 +67,15 @@ func TestTwoHeaders(t *testing.T) {
 	assert.Equal(t, 23, n)
 	assert.False(t, done)
 
-  data = data[n:]
-  n, done, err = headers.Parse(data)
+	data = data[n:]
+	n, done, err = headers.Parse(data)
 	require.NoError(t, err)
 	require.NotNil(t, headers)
 	assert.Equal(t, "testtestst", headers["test"])
 	assert.Equal(t, 19, n)
 	assert.False(t, done)
 
-  n, done, err = headers.Parse(data[n:])
+	n, done, err = headers.Parse(data[n:])
 	require.NoError(t, err)
 	require.NotNil(t, headers)
 	assert.Equal(t, 2, n)
@@ -83,19 +83,19 @@ func TestTwoHeaders(t *testing.T) {
 }
 
 func TestInvalidSpacingHeader(t *testing.T) {
-  headers := NewHeaders()
-  data := []byte("       Host : localhost:42069       \r\n\r\n")
-  n, done, err := headers.Parse(data)
+	headers := NewHeaders()
+	data := []byte("       Host : localhost:42069       \r\n\r\n")
+	n, done, err := headers.Parse(data)
 	require.Error(t, err)
 	assert.Equal(t, 0, n)
 	assert.False(t, done)
 }
 
 func TestCRLFAtTheBegginingOfLine(t *testing.T) {
-  // Test: CRLF at the begginig of line
-  headers := NewHeaders()
-  data := []byte("\r\n\r\n")
-  n, done, err := headers.Parse(data)
+	// Test: CRLF at the begginig of line
+	headers := NewHeaders()
+	data := []byte("\r\n\r\n")
+	n, done, err := headers.Parse(data)
 	require.NoError(t, err)
 	assert.Equal(t, 2, n)
 	assert.True(t, done)
