@@ -2,7 +2,7 @@ package main
 
 import (
 	"fmt"
-	"io"
+	"http-from-tcp/internal/request"
 	"net"
 	"os"
 )
@@ -10,12 +10,13 @@ import (
 func main() {
   l, err := net.Listen("tcp", "127.0.0.1:42069")
   if err != nil {
-    fmt.Println("unable to open file")
+    fmt.Println("unable to open port")
     os.Exit(201)
   }
 
    defer l.Close()
 
+  fmt.Println("Starting to listen on port 42069")
 
   for {
     a, err := l.Accept()
@@ -26,43 +27,14 @@ func main() {
 
     fmt.Println("connection was accepted")
 
-    c := getLinesChannel(a)
-    line := <-c
-    fmt.Printf("%s\n", line)
+    //readAll(a)
+    c, err := request.RequestFromReader(a)
+    if err != nil {
+      fmt.Printf("Erorr processing request: %v\n", err)
+    } else {
+      c.RequestLine.Print()
+    }
 
     fmt.Println("connection was terminated")
   }
-}
-
-func getLinesChannel(r io.ReadCloser) <-chan string {
-  lines := make(chan string)
-
-  go func() {
-    defer r.Close()
-    defer close(lines)
-
-    var read = make([]byte, 8)
-    var line []byte
-
-    for {
-      readBytes, err := r.Read(read)
-      if readBytes > 0 {
-        for _, byt := range read {
-          if byt == '\n' {
-            lines <- string(line)
-            line = make([]byte, 0)
-            continue
-          }
-          line = append(line, byt)
-        }
-      }
-
-      if err == io.EOF {
-        lines <- string(line)
-        break
-      }
-    }
-  }()
-  
-  return lines
 }
