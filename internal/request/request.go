@@ -2,6 +2,7 @@ package request
 
 import (
 	"fmt"
+	"http-from-tcp/internal/headers"
 	"io"
 	"strings"
 )
@@ -14,7 +15,7 @@ type RequestLine struct {
 
 type Request struct {
 	RequestLine RequestLine
-	//Headers   map[string]string
+	Headers     map[string]string
 	//Body  []byte
 }
 
@@ -32,15 +33,53 @@ func RequestFromReader(reader io.Reader) (*Request, error) {
 		return nil, err
 	}
 
-	lines := strings.Split(string(header), "\r\n")
+	bytesRead, requestLine, err := parseRequestLine(header)
+	if err != nil {
+		return nil, err
+	}
+
+	h, err := parseHeader(bytesRead, header)
+	if err != nil {
+		return nil, err
+	}
+
+	return &Request{
+		RequestLine: requestLine,
+		Headers:     h,
+	}, nil
+}
+
+func parseHeader(startOffset int, data []byte) (headers.Headers, error) {
+	header := headers.Headers{}
+	offset := startOffset
+
+	for {
+		readBytes, done, err := header.Parse(data[offset:])
+		if err != nil {
+			return nil, err
+		}
+
+		if done {
+			break
+		}
+
+		offset += readBytes
+	}
+
+	return header, nil
+}
+
+func parseRequestLine(data []byte) (int, RequestLine, error) {
+	lines := strings.Split(string(data), "\r\n")
+
 	if len(lines) < 1 {
-		return nil, fmt.Errorf("invalid header")
+		return 0, RequestLine{}, fmt.Errorf("invalid header")
 	}
 
 	fmt.Println(lines[0])
 	rLine := strings.Split(lines[0], " ")
 	if len(rLine) != 3 {
-		return nil, fmt.Errorf("missing request line fields")
+		return 0, RequestLine{}, fmt.Errorf("missing request line fields")
 	}
 
 	requestLine := RequestLine{
@@ -49,7 +88,5 @@ func RequestFromReader(reader io.Reader) (*Request, error) {
 		Method:        rLine[0],
 	}
 
-	return &Request{
-		RequestLine: requestLine,
-	}, nil
+	return len(lines[0]) + 2, requestLine, nil
 }
