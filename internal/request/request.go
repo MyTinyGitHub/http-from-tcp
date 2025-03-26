@@ -1,6 +1,7 @@
 package request
 
 import (
+	"bytes"
 	"fmt"
 	"http-from-tcp/internal/headers"
 	"io"
@@ -15,9 +16,19 @@ type RequestLine struct {
 
 type Request struct {
 	RequestLine RequestLine
-	Headers     map[string]string
+	Headers     headers.Headers
 	//Body  []byte
+
+	state requestState
 }
+
+type requestState int
+
+const (
+	requestStateInitialized requestState = iota
+	requestStateParsingHeaders
+	requestStateDone
+)
 
 func (r RequestLine) Print() {
 	fmt.Println("Request line:")
@@ -26,67 +37,97 @@ func (r RequestLine) Print() {
 	fmt.Printf("- Version: %v\n", r.HttpVersion)
 }
 
+const bufferSize = 8
+
 func RequestFromReader(reader io.Reader) (*Request, error) {
-	header, err := io.ReadAll(reader)
-
-	if err != nil {
-		return nil, err
+	buffer := make([]byte, bufferSize, bufferSize)
+	currentOffset := 0
+	req := &Request{
+		state:   requestStateInitialized,
+		Headers: headers.NewHeaders(),
 	}
 
-	bytesRead, requestLine, err := parseRequestLine(header)
-	if err != nil {
-		return nil, err
-	}
+	for req.state != requestStateDone {
+		if currentOffset >= len(buffer) {
+			newBuffer := make([]byte, len(buffer)*2)
+			copy(newBuffer, buffer)
+			buffer = newBuffer
+		}
 
-	h, err := parseHeader(bytesRead, header)
-	if err != nil {
-		return nil, err
-	}
+		readBytes, err := reader.Read(buffer[currentOffset:])
+		if err != nil {
+			if err == io.EOF {
+				bytes, err := req.parse(buffer[:currentOffset])
 
-	return &Request{
-		RequestLine: requestLine,
-		Headers:     h,
-	}, nil
-}
+				if err != nil {
+					return nil, err
+				}
 
-func parseHeader(startOffset int, data []byte) (headers.Headers, error) {
-	header := headers.Headers{}
-	offset := startOffset
+				if bytes <= 0 {
+					return nil, fmt.Errorf("unexpected end of reader %d", bytes)
+				}
 
-	for {
-		readBytes, done, err := header.Parse(data[offset:])
+				return req, nil
+			}
+			return nil, err
+		}
+
+		currentOffset += readBytes
+
+		numBytesParsed, err := req.parse(buffer[:currentOffset])
 		if err != nil {
 			return nil, err
 		}
 
-		if done {
-			break
-		}
-
-		offset += readBytes
+		copy(buffer, buffer[numBytesParsed:])
+		currentOffset -= numBytesParsed
 	}
 
-	return header, nil
+	return req, nil
 }
 
-func parseRequestLine(data []byte) (int, RequestLine, error) {
-	lines := strings.Split(string(data), "\r\n")
+func (req *Request) parse(data []byte) (int, error) {
+	if req.state == requestStateInitialized {
+		return parseRequestLine(req, data)
+	} else if req.state == requestStateParsingHeaders {
+		return parseHeader(req, data)
+	}
+	return 0, nil
+}
 
-	if len(lines) < 1 {
-		return 0, RequestLine{}, fmt.Errorf("invalid header")
+func parseHeader(req *Request, data []byte) (int, error) {
+	readBytes, done, err := req.Headers.Parse(data)
+	if err != nil {
+		return 0, err
 	}
 
-	fmt.Println(lines[0])
-	rLine := strings.Split(lines[0], " ")
-	if len(rLine) != 3 {
-		return 0, RequestLine{}, fmt.Errorf("missing request line fields")
+	if done {
+		req.state = requestStateDone
 	}
 
-	requestLine := RequestLine{
-		HttpVersion:   strings.Split(rLine[2], "/")[1],
-		RequestTarget: rLine[1],
-		Method:        rLine[0],
+	return readBytes, nil
+}
+
+func parseRequestLine(req *Request, data []byte) (int, error) {
+	idx := bytes.Index(data, []byte("\r\n"))
+
+	if idx == -1 {
+		return 0, nil
 	}
 
-	return len(lines[0]) + 2, requestLine, nil
+	requestLineText := string(data[:idx])
+	parts := strings.Split(requestLineText, " ")
+	if len(parts) != 3 {
+		return 0, fmt.Errorf("missing request line fields")
+	}
+
+	req.RequestLine = RequestLine{
+		HttpVersion:   strings.Split(parts[2], "/")[1],
+		RequestTarget: parts[1],
+		Method:        parts[0],
+	}
+
+	req.state = requestStateParsingHeaders
+
+	return idx + 2, nil
 }

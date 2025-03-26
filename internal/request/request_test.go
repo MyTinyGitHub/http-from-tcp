@@ -86,3 +86,13 @@ func TestCaseSensitiveHeader(t *testing.T) {
 	assert.Equal(t, "curl/7.81.0", r.Headers["user-agent"])
 	assert.Equal(t, "*/*", r.Headers["accept"])
 }
+
+func TestCaseMissingEndOfHeader(t *testing.T) {
+	reader := &chunkReader{
+		data:            "GET / HTTP/1.1\r\nHoSt: localhost:42069\r\nUser-Agent: curl/7.81.0\r\nAccept: */*",
+		numBytesPerRead: 3,
+	}
+	r, err := RequestFromReader(reader)
+	require.Error(t, err)
+	require.Nil(t, r)
+}
