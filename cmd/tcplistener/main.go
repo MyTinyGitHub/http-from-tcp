@@ -28,11 +28,11 @@ func main() {
 		fmt.Println("connection was accepted")
 
 		//readAll(a)
-		c, err := request.RequestFromReader(a)
+		r, err := request.RequestFromReader(a)
 		if err != nil {
 			fmt.Printf("Erorr processing request: %v\n", err)
 		} else {
-			c.RequestLine.Print()
+			r.Print()
 		}
 
 		fmt.Println("connection was terminated")

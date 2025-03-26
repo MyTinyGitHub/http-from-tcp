@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"http-from-tcp/internal/headers"
 	"io"
+	"strconv"
 	"strings"
 )
 
@@ -17,7 +18,7 @@ type RequestLine struct {
 type Request struct {
 	RequestLine RequestLine
 	Headers     headers.Headers
-	//Body  []byte
+	Body        []byte
 
 	state requestState
 }
@@ -27,14 +28,21 @@ type requestState int
 const (
 	requestStateInitialized requestState = iota
 	requestStateParsingHeaders
+	requestStateParsingBody
 	requestStateDone
 )
 
-func (r RequestLine) Print() {
+func (r Request) Print() {
 	fmt.Println("Request line:")
-	fmt.Printf("- Method: %v\n", r.Method)
-	fmt.Printf("- Target: %v\n", r.RequestTarget)
-	fmt.Printf("- Version: %v\n", r.HttpVersion)
+	fmt.Printf("- Method: %v\n", r.RequestLine.Method)
+	fmt.Printf("- Target: %v\n", r.RequestLine.RequestTarget)
+	fmt.Printf("- Version: %v\n", r.RequestLine.HttpVersion)
+	fmt.Println("Headers:")
+	for key, value := range r.Headers {
+		fmt.Printf("- %v: %v\n", key, value)
+	}
+	fmt.Println("Body:")
+	fmt.Println(string(r.Body))
 }
 
 const bufferSize = 8
@@ -91,8 +99,28 @@ func (req *Request) parse(data []byte) (int, error) {
 		return parseRequestLine(req, data)
 	} else if req.state == requestStateParsingHeaders {
 		return parseHeader(req, data)
+	} else if req.state == requestStateParsingBody {
+		return parseBody(req, data)
 	}
+
 	return 0, nil
+}
+
+func parseBody(req *Request, data []byte) (int, error) {
+	contentLength, ok := req.Headers["content-length"]
+	if !ok {
+		req.state = requestStateDone
+		return 2, nil
+	}
+
+	bodySize, _ := strconv.Atoi(contentLength)
+
+	req.Body = append(req.Body, data...)
+	if len(req.Body) == bodySize {
+		req.state = requestStateDone
+	}
+
+	return len(data), nil
 }
 
 func parseHeader(req *Request, data []byte) (int, error) {
@@ -102,7 +130,7 @@ func parseHeader(req *Request, data []byte) (int, error) {
 	}
 
 	if done {
-		req.state = requestStateDone
+		req.state = requestStateParsingBody
 	}
 
 	return readBytes, nil
